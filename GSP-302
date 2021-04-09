@@ -1,0 +1,94 @@
+# Configure a Firewall and a Startup Script with Deployment Manager
+# https://qwiklabs.com/focuses/1736?parent=catalog
+
+
+
+
+# Open the Cloud Shell, run:
+mkdir deployment_manager
+cd deployment_manager
+gsutil cp gs://spls/gsp302/* .
+
+
+
+
+
+
+
+
+
+# use nano or open editor to edit qwiklabs.jinja and qwiklabs.yaml
+qwiklabs.jinja
+{
+    resources:
+- type: compute.v1.instance
+  name: vm-{{ env["deployment"] }}
+  properties:
+    zone: {{ properties["zone"] }}
+    machineType: https://www.googleapis.com/compute/v1/projects/{{ env["project"] }}/zones/{{ properties["zone"] }}/machineTypes/f1-micro
+    tags:
+        items:
+        - 'http'
+    metadata:
+      items:
+      # For more ways to use startup scripts on an instance, see:
+      #   https://cloud.google.com/compute/docs/startupscript
+      - key: startup-script
+        value: |
+          #!/bin/bash
+          apt-get update
+          apt-get install -y apache2
+    disks:
+    - deviceName: boot
+      type: PERSISTENT
+      boot: true
+      autoDelete: true
+      initializeParams:
+        diskName: disk-{{ env["deployment"] }}
+        sourceImage: https://www.googleapis.com/compute/v1/projects/debian-cloud/global/images/family/debian-9
+    networkInterfaces:
+    - network: https://www.googleapis.com/compute/v1/projects/{{ env["project"] }}/global/networks/default
+      # Access Config required to give the instance a public IP address
+      accessConfigs:
+      - name: External NAT
+        type: ONE_TO_ONE_NAT
+- type: compute.v1.firewall
+  name: {{ env["project"] }}-allow-http
+  properties:
+    network: https://www.googleapis.com/compute/v1/projects/{{ env["project"] }}/global/networks/default
+    sourceRanges: [0.0.0.0/0]
+    targetTags: ['http']
+    allowed:
+    - IPProtocol: tcp
+      ports: ['80']
+}
+
+
+
+
+
+
+
+
+qwuiklab.yaml
+{
+    imports:
+- path: qwiklabs.jinja
+
+resources:
+- name: qwiklabs
+  type: qwiklabs.jinja
+  properties:
+    zone: us-central1-a
+}
+
+
+
+
+
+
+
+
+
+# back to cloud shell, run:
+gcloud deployment-manager deployments create vm-test --config=qwiklabs.yaml
